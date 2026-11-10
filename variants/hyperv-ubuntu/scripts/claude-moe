@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Start the themed Claude copy. After an official update it rebuilds the copy first;
+# if that fails for any reason it starts the official Claude instead, so Claude always opens.
+set -u
+PREFIX="${CLAUDE_MOE_PREFIX:-$HOME/.local/share/claude-moe}"
+OFFICIAL=/usr/lib/claude-desktop/claude-desktop
+APP="$PREFIX/app/claude-desktop"
+
+official() {
+  printf 'claude-moe: %s; starting the official Claude\n' "$1" >&2
+  shift
+  exec "$OFFICIAL" "$@"
+}
+
+if [ ! -x "$OFFICIAL" ]; then
+  echo 'claude-moe: the official Claude is not installed' >&2
+  exit 1
+fi
+# A running copy only needs the arguments handed over (single instance); never rebuild under it.
+if ! pgrep -f -- "^$APP( |\$)" >/dev/null 2>&1; then
+  python3 -I "$PREFIX/lib/build.py" --prefix "$PREFIX" --quiet || official "rebuild failed" "$@"
+fi
+[ -x "$APP" ] || official "themed copy missing" "$@"
+exec "$APP" "$@"
