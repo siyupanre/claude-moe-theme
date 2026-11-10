@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>美化效果预览</title>
+<style>
+  :root {
+    --page: #f5f4ef; --side: #efede6; --line: #e2dfd5; --ink: #2b2a27; --muted: #77746c;
+    --bubble: #e9e6dc; --input: #ffffff; --accent: #d97757; --wash: 250,248,244;
+  }
+  :root[data-theme="dark"] {
+    --page: #262624; --side: #1f1e1c; --line: #3a3935; --ink: #ece9e1; --muted: #a29f97;
+    --bubble: #393834; --input: #30302d; --wash: 28,25,23;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body { background: var(--page); color: var(--ink); font: 15px/1.65 "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif; display: flex; overflow: hidden; }
+
+  aside { width: 260px; flex: none; background: var(--side); border-right: 1px solid var(--line); padding: 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+  aside .brand { font-weight: 600; font-size: 17px; padding: 4px 8px 12px; }
+  aside .item { padding: 7px 10px; border-radius: 8px; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  aside .item.on { background: var(--bubble); color: var(--ink); }
+
+  main { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; isolation: isolate; }
+  #layer { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+  #layer video, #layer img, #wash { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #wash { background: rgba(var(--wash), var(--wash-a, .50)); }
+
+  .transcript { flex: 1; overflow-y: auto; padding: 32px 24px 16px; }
+  .col { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  .user { align-self: flex-end; background: var(--bubble); padding: 10px 16px; border-radius: 16px; max-width: 80%; }
+  .bot p + p { margin-top: 10px; }
+  .bot code { background: var(--bubble); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .dock { padding: 0 24px 22px; }
+  .box { max-width: 720px; margin: 0 auto; background: var(--input); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px 12px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  .box .ph { color: var(--muted); }
+  .box .row { display: flex; justify-content: space-between; margin-top: 18px; color: var(--muted); font-size: 13px; }
+  .send { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); }
+
+  #panel { position: fixed; right: 16px; top: 16px; width: 290px; background: rgba(20,20,22,.88); color: #eee; border-radius: 12px; padding: 14px; font-size: 13px; z-index: 10; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+  #panel h2 { font-size: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  #panel h2 button { background: none; border: 0; color: #aaa; cursor: pointer; font-size: 13px; }
+  #panel label { display: block; margin: 10px 0 4px; color: #bbb; }
+  #panel select, #panel input[type=range] { width: 100%; }
+  #panel select { background: #333; color: #eee; border: 1px solid #555; border-radius: 6px; padding: 4px; }
+  #panel .btns { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+  #panel .btns button, #panel .btns a { flex: 1; text-align: center; background: #3a3a3e; color: #eee; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; text-decoration: none; font: inherit; }
+  #panel .btns a.primary { background: #d97757; color: #fff; }
+  #stats { margin-top: 12px; font: 12px/1.6 ui-monospace, monospace; color: #9fd29f; white-space: pre-wrap; }
+  #panel.min > :not(h2) { display: none; }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand">Claude</div>
+  <div class="item on">美化方案讨论</div>
+  <div class="item">周报整理</div>
+  <div class="item">Python 脚本调试</div>
+  <div class="item">旅行行程规划</div>
+</aside>
+
+<main>
+  <div id="layer" aria-hidden="true"><div id="wash"></div></div>
+  <div class="transcript"><div class="col">
+    <div class="user">帮我看看这个背景会不会影响阅读？</div>
+    <div class="bot">
+      <p>这是一段模拟的回复文字，用来检查背景在遮罩下的可读性。正文在浅色和深色主题下都应该清楚，人物轮廓隐约可见即可。</p>
+      <p>可以用右上角的面板切换素材、调整遮罩浓度，也可以切换深色主题。比如 <code>chat-background.mp4</code> 是参考项目用于聊天背景的 1080p30 循环视频。</p>
+      <p>The quick brown fox jumps over the lazy dog. 混排中英文时，细字和标点也要看得清。</p>
+    </div>
+    <div class="user">开场动画在哪里看？</div>
+    <div class="bot"><p>点面板里的“开场·插电”，会在新标签页播放 4 秒 60 帧的睁眼视频；“开场·电池”用已睁眼的静态图代替视频，特效和文字相同。都无声，播完后按空格或 R 重播，F 全屏。接入 Claude 后会按是否插电自动选择。</p></div>
+  </div></div>
+  <div class="dock"><div class="box"><div class="ph">回复 Claude…</div><div class="row"><span>＋　工具</span><span class="send"></span></div></div></div>
+</main>
+
+<div id="panel">
+  <h2>效果预览 <button id="min" type="button">收起</button></h2>
+  <label for="src">背景素材</label>
+  <select id="src">
+    <option value="runtime/chat-background.mp4">★ 成品：循环视频 1080p24</option>
+    <option value="../../runtime/chat-background.mp4">循环视频 1080p30（参考项目实际使用）</option>
+    <option value="../../assets/original-videos/live2d_4k60_loop.mp4">循环视频 4K60 原片</option>
+    <option value="runtime/chat-background.jpg">静态图 1080p（视频首帧）</option>
+    <option value="../../assets/archive/background-4k.png">静态图 4K（旧版背景）</option>
+    <option value="">无背景（官方原样）</option>
+  </select>
+  <label for="wash-a">遮罩浓度：<span id="wash-v"></span></label>
+  <input id="wash-a" type="range" min="0" max="0.95" step="0.05" value="0.50">
+  <label for="theme">界面主题</label>
+  <select id="theme"><option value="light">浅色</option><option value="dark">深色</option></select>
+  <div class="btns">
+    <button id="pause" type="button">暂停</button>
+    <button id="full" type="button">全屏</button>
+  </div>
+  <div class="btns">
+    <a class="primary" href="runtime/splash/splash.html?power=ac" target="_blank">★ 开场·插电</a>
+    <a class="primary" href="runtime/splash/splash.html?power=battery" target="_blank">★ 开场·电池</a>
+  </div>
+  <div class="btns">
+    <a href="../../runtime/splash/splash.html?mute" target="_blank">原版开场（对比）</a>
+  </div>
+  <div id="stats"></div>
+</div>
+
+<script>
+  const layer = document.getElementById('layer'), wash = document.getElementById('wash');
+  const src = document.getElementById('src'), washA = document.getElementById('wash-a'), washV = document.getElementById('wash-v');
+  const theme = document.getElementById('theme'), pauseBtn = document.getElementById('pause'), stats = document.getElementById('stats');
+  let media = null, last = null;
+
+  function setSource(path) {
+    if (media) { if (media.tagName === 'VIDEO') { media.pause(); media.removeAttribute('src'); media.load(); } media.remove(); media = null; }
+    last = null;
+    if (!path) return;
+    if (/\.mp4$/.test(path)) {
+      media = document.createElement('video');
+      Object.assign(media, { muted: true, loop: true, playsInline: true, autoplay: true, src: path });
+      media.play().catch(() => {});
+    } else {
+      media = new Image(); media.src = path;
+    }
+    layer.insertBefore(media, wash);
+  }
+  function setWash() { document.documentElement.style.setProperty('--wash-a', washA.value); washV.textContent = Math.round(washA.value * 100) + '%'; }
+
+  src.onchange = () => setSource(src.value);
+  washA.oninput = setWash;
+  theme.onchange = () => { document.documentElement.dataset.theme = theme.value; };
+  pauseBtn.onclick = () => { if (media?.tagName !== 'VIDEO') return; media.paused ? media.play() : media.pause(); pauseBtn.textContent = media.paused ? '继续' : '暂停'; };
+  document.getElementById('full').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  document.getElementById('min').onclick = e => { const p = document.getElementById('panel'); p.classList.toggle('min'); e.target.textContent = p.classList.contains('min') ? '展开' : '收起'; };
+
+  // Show what the screen actually renders, plus decode health over the last second.
+  setInterval(() => {
+    const dpr = devicePixelRatio, w = innerWidth, h = innerHeight;
+    let s = `窗口 ${w}×${h}（缩放 ${dpr}，实际 ${Math.round(w * dpr)}×${Math.round(h * dpr)} 像素）`;
+    if (media?.tagName === 'VIDEO' && media.videoWidth) {
+      const q = media.getVideoPlaybackQuality(), now = { t: performance.now(), f: q.totalVideoFrames, d: q.droppedVideoFrames };
+      s += `\n视频 ${media.videoWidth}×${media.videoHeight}`;
+      if (last) {
+        const sec = (now.t - last.t) / 1000, fps = (now.f - last.f) / sec, drop = now.d - last.d;
+        s += `\n实时帧率 ${fps.toFixed(1)}　近 1 秒丢帧 ${drop}`;
+      }
+      s += `\n累计丢帧 ${q.droppedVideoFrames} / ${q.totalVideoFrames}`;
+      last = now;
+    } else if (media?.tagName === 'IMG' && media.naturalWidth) {
+      s += `\n图片 ${media.naturalWidth}×${media.naturalHeight}`;
+    }
+    stats.textContent = s;
+  }, 1000);
+
+  setWash();
+  setSource(src.value);
+</script>
+</body>
+</html>
