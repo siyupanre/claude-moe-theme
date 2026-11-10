@@ -216,7 +216,8 @@ function installClaudeChatBackground(poster, encodedVideo, suspended = false, op
   new MutationObserver(updateTheme).observe(document.documentElement, {attributes: true, attributeFilter: ['class', 'data-mode']});
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
   qualityTimer = setInterval(checkQuality, QUALITY_MS);
-  window.addEventListener('unload', () => { clearInterval(qualityTimer); active?.video.pause(); if (source) URL.revokeObjectURL(source); }, {once: true});
+  // claude.ai forbids 'unload' (Permissions-Policy); 'pagehide' is the allowed equivalent.
+  window.addEventListener('pagehide', () => { clearInterval(qualityTimer); active?.video.pause(); if (source) URL.revokeObjectURL(source); }, {once: true});
   window[SLOT] = {
     refresh,
     setSuspended(value) { suspended = Boolean(value); geometry(); },

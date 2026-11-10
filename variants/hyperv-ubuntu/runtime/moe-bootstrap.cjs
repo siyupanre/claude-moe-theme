@@ -1,12 +1,13 @@
 'use strict';
 // Entry point of the themed Claude copy. It adds the startup splash and the chat background,
 // then loads the official main script unchanged. Any failure here leaves the official app running.
-const {app, BrowserWindow, powerMonitor} = require('electron');
+const {app, BrowserWindow, powerMonitor, webContents} = require('electron');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 
 const ORIGINAL_MAIN = './.vite/build/index.pre.js';
 const assets = path.join(process.resourcesPath, 'moe');
-const DEFAULTS = {splash: true, background: true, wash: 0.65, composer: 'transparent', pauseWhenUnfocused: true, diagnostics: false};
+const DEFAULTS = {splash: true, splashWaitForApp: true, splashMaxWait: 20, background: true, wash: 0.65,
+  composer: 'transparent', pauseWhenUnfocused: true, diagnostics: false};
 
 function loadConfig() {
   const file = process.env.CLAUDE_MOE_CONFIG || path.join(os.homedir(), '.local/share/claude-moe/config.json');
@@ -61,6 +62,41 @@ function routeAutostartThroughLauncher() {
   } catch {}
 }
 
+// Resolves once claude.ai has rendered a usable page: a composer on chat pages, or a fully loaded
+// document elsewhere (settings and the like have no composer). Checks presence only, never content,
+// from its own isolated world; gives up after 40s so it never keeps polling.
+const READY_WORLD = 24603;
+const READY_PROBE = `(() => {
+  if (document.readyState !== 'complete') return false;
+  if (document.querySelector('[data-chat-input-container],[data-message-box],[contenteditable="true"][role="textbox"],main textarea')) return true;
+  return !/^\\/(?:$|new|chat|epitaxy|code|cowork|recents|tasks|project)(?:\\/|$)/.test(location.pathname);
+})()`;
+function waitForApp() {
+  const started = Date.now();
+  let busy = false, done = false;
+  return new Promise(resolve => {
+    const timer = setInterval(async () => {
+      if (busy || done) return;
+      if (Date.now() - started > 40000) { done = true; clearInterval(timer); status('app_ready_unknown'); return; }
+      busy = true;
+      try {
+        for (const wc of webContents.getAllWebContents()) {
+          if (wc.isDestroyed()) continue;
+          try { if (new URL(wc.getURL()).hostname !== 'claude.ai') continue; } catch { continue; }
+          try {
+            if (await wc.executeJavaScriptInIsolatedWorld(READY_WORLD, [{code: READY_PROBE}])) {
+              done = true;
+              clearInterval(timer);
+              status('app_ready', Date.now() - started);
+              return resolve();
+            }
+          } catch {}
+        }
+      } finally { busy = false; }
+    }, 400);
+  });
+}
+
 function install() {
   app.whenReady().then(routeAutostartThroughLauncher);
   app.on('will-quit', routeAutostartThroughLauncher);
@@ -97,8 +133,11 @@ function install() {
       try {
         background?.setSuspended(true);
         const power = onBattery() ? 'battery' : 'ac';
+        const holdSeconds = Math.min(60, Math.max(0, Number(config.splashMaxWait) || 0));
         cover = require('./startup-cover.cjs')(win, {
           assets, power, capture,
+          appReady: config.splashWaitForApp && holdSeconds > 0 ? waitForApp() : null,
+          holdSeconds,
           onReady: () => status('splash_ready', power),
           onError: reason => status('splash_failed', reason),
           onClose: reason => {

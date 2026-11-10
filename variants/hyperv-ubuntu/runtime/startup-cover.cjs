@@ -6,8 +6,11 @@
 const {WebContentsView, webContents} = require('electron');
 const path = require('node:path');
 
-module.exports = function attachStartupCover(win, {assets, power = 'ac', maxMs = 15000, capture = () => {},
+// appReady: optional promise that resolves once the app behind has loaded; the splash then holds
+// its last frame for up to holdSeconds after the clip instead of revealing a half-loaded window.
+module.exports = function attachStartupCover(win, {assets, power = 'ac', appReady = null, holdSeconds = 20, capture = () => {},
   onReady = () => {}, onClose = () => {}, onError = () => {}}) {
+  const maxMs = 12000 + (appReady ? holdSeconds * 1000 : 0);
   const host = win.contentView;
   const originalAdd = host.addChildView, ownAdd = Object.getOwnPropertyDescriptor(host, 'addChildView');
   const view = new WebContentsView({webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true,
@@ -74,6 +77,7 @@ module.exports = function attachStartupCover(win, {assets, power = 'ac', maxMs =
       } else if (title.startsWith('CLAUDE_SPLASH_PLAYING')) {
         playing = true;
         focus();
+        appReady?.then(() => { if (!closed && !wc.isDestroyed()) wc.executeJavaScript('window.__claudeAppReady?.()').catch(() => {}); });
         setTimeout(() => capture('splash', wc), 2600).unref();
       } else if (title.startsWith('CLAUDE_SPLASH_DONE') && !finishing) {
         finishing = true;
@@ -84,7 +88,8 @@ module.exports = function attachStartupCover(win, {assets, power = 'ac', maxMs =
     wc.once('render-process-gone', () => { onError('renderer-gone'); close('renderer-failed'); });
     timer = setTimeout(() => close('timeout'), maxMs);
     timer.unref();
-    wc.loadFile(path.join(assets, 'splash', 'splash.html'), {query: {launcher: '', embedded: '', power}})
+    const query = {launcher: '', embedded: '', power, ...(appReady ? {hold: String(holdSeconds)} : {})};
+    wc.loadFile(path.join(assets, 'splash', 'splash.html'), {query})
       .catch(() => { onError('load-failed'); close('load-failed'); });
   } catch (error) {
     close('attach-failed');
