@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh-CN" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Splash</title>
+<style>
+  /* Lightweight splash: the awake clip (or, on battery, its last frame) plus a few CSS effects.
+     Everything animates opacity/transform only, so the software compositor stays cheap. */
+  :root { --orange: #e8762c; --ink: #5a3622; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #07080f; cursor: none; }
+  body { font-family: "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei UI", "PingFang SC", sans-serif; }
+
+  #stage { position: fixed; inset: 0; overflow: hidden; background: radial-gradient(120% 90% at 45% 40%, #101226 0%, #07080f 55%, #030308 100%); }
+  .layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+  .portrait { object-fit: cover; object-position: center; opacity: 0; transform: scale(1.035); transform-origin: 42% 34%; display: none; }
+  [data-mode="video"] #awake, [data-mode="still"] #still { display: block; }
+  #bloom { background: radial-gradient(42% 55% at 42% 32%, rgba(255,200,130,.75), rgba(255,170,90,0) 70%); opacity: 0; }
+  #vignette { background: radial-gradient(130% 100% at 45% 40%, rgba(0,0,0,0) 55%, rgba(10,6,4,.38) 100%); opacity: 0; }
+  #fade { background: #000; opacity: 0; }
+
+  .mote { position: absolute; width: var(--s); height: var(--s); left: var(--x); top: var(--y); border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,225,170,.95) 0, rgba(255,190,110,.45) 40%, rgba(255,170,90,0) 70%); opacity: 0; }
+
+  /* Text sits in the bright space top-right, clear of the face. */
+  #hud { position: absolute; left: 63vw; top: 9vh; width: 33vw; color: var(--ink); text-shadow: 0 0 12px rgba(255,250,240,.75); }
+  .tag { font: 600 clamp(10px, .85vw, 15px)/1 "Noto Sans Mono CJK SC", "DejaVu Sans Mono", monospace; letter-spacing: .38em; color: var(--orange); opacity: 0; }
+  .title { margin-top: 1.4vh; font-weight: 300; font-size: clamp(26px, 3.5vw, 64px); letter-spacing: .05em; line-height: 1.15; min-height: 1.2em; white-space: nowrap; }
+  .title b { font-weight: 600; }
+  .caret { display: inline-block; width: .06em; height: .9em; margin-left: .08em; background: var(--orange); vertical-align: -.08em; opacity: 0; }
+  .rule { margin: 2.2vh 0 1.8vh; height: 2px; width: 24vw; background: linear-gradient(90deg, var(--orange), rgba(232,118,44,0)); transform: scaleX(0); transform-origin: left; }
+  .welcome { font-size: clamp(15px, 1.7vw, 30px); letter-spacing: .3em; opacity: 0; transform: translateY(12px); }
+  .welcome em { font-style: normal; color: var(--orange); }
+
+  #skip { position: absolute; right: 26px; bottom: 22px; font: 13px/1 "Noto Sans CJK SC", sans-serif; letter-spacing: .12em; color: rgba(255,255,255,.8); opacity: 0;
+    padding: 7px 12px; border-radius: 14px; background: rgba(8,8,16,.38); border: 1px solid rgba(255,255,255,.18); text-shadow: 0 1px 2px rgba(0,0,0,.5); display: none; }
+  #hint { position: fixed; right: 18px; bottom: 14px; font: 12px/1 sans-serif; color: rgba(255,255,255,.6); opacity: 0; transition: opacity .3s; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  body.hint #hint { opacity: 1; }
+
+  /* Timeline, relative to playback start: eyes open at about 1.0s, the clip ends at 4.0s. */
+  .play .portrait { animation: show .55s ease-out forwards, settle 2.8s cubic-bezier(.2,.7,.3,1) forwards; }
+  .play #vignette { animation: show 1s .2s ease-out forwards; }
+  .play #bloom    { animation: bloom 2.6s .85s ease-in-out forwards; }
+  /* On battery, keep whole-window animations short so most frames only repaint the motes and text. */
+  [data-mode="still"] .play .portrait { transform: none; animation: show .55s ease-out forwards; }
+  [data-mode="still"] .play #vignette { animation: show .55s ease-out forwards; }
+  [data-mode="still"] .play #bloom    { animation: glow .8s .4s ease-out forwards; }
+  @keyframes glow { to { opacity: .22; } }
+  .play .mote     { animation: drift var(--d) var(--t) ease-out forwards; }
+  .play .tag      { animation: show .6s 1.25s ease-out forwards; }
+  .play .caret    { animation: blink .72s 1.3s steps(1) infinite; }
+  .play .rule     { animation: grow .7s 2.35s cubic-bezier(.2,.7,.3,1) forwards; }
+  .play .welcome  { animation: rise .8s 2.55s cubic-bezier(.2,.7,.3,1) forwards; }
+  .play #skip     { animation: show .5s 1s ease-out forwards; }
+  .ending #skip   { animation: hide .4s ease-in forwards; }
+  .closing #fade  { animation: show .7s ease-in forwards; }
+
+  @keyframes show   { to { opacity: 1; } }
+  @keyframes hide   { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes settle { to { transform: scale(1); } }
+  @keyframes bloom  { 0% { opacity: 0; } 30% { opacity: .38; } 100% { opacity: .1; } }
+  @keyframes blink  { 0% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes grow   { to { transform: scaleX(1); } }
+  @keyframes rise   { to { opacity: 1; transform: none; } }
+  @keyframes drift  { 0% { opacity: 0; transform: translate(0, 0); } 25% { opacity: var(--o); } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)); } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="awake" class="layer portrait" preload="none" muted playsinline></video>
+  <img id="still" class="layer portrait" alt="">
+  <div id="vignette" class="layer"></div>
+  <div id="bloom" class="layer"></div>
+  <div id="motes" class="layer"></div>
+  <div id="hud">
+    <div class="tag">CLAUDE</div>
+    <div class="title"><span id="typed"></span><span class="caret"></span></div>
+    <div class="rule"></div>
+    <div class="welcome">欢迎回来，<em>Siyu</em></div>
+  </div>
+  <div id="fade" class="layer"></div>
+  <div id="skip">点击跳过</div>
+</div>
+<div id="hint">空格 / R 重播 · F 全屏</div>
+
+<script>
+'use strict';
+// Contract with startup-cover.cjs (unchanged from the reference splash):
+//   title CLAUDE_SPLASH_READY|nc=…  -> host attaches the view and calls window.__claudeBeginPlayback()
+//   title CLAUDE_SPLASH_PLAYING     -> host focuses the view
+//   title CLAUDE_SPLASH_DONE        -> host calls window.__claudeStopSound(sec) and fades the view out
+// Query: ?launcher (host-driven, Esc/space/enter/click skip), ?embedded (wait for the host),
+//        ?power=ac|battery (the host passes the AC state; battery shows the still frame instead of the clip).
+// The splash is silent: the clip has no audio track.
+const VIDEO = 'video/awake.mp4', STILL = 'video/awake-still.jpg';
+const CLIP = 4.0, TITLE = 'Claude 启动……', BOLD = 6, TYPE_AT = 1.4, TYPE_MS = 110, HOLD_AFTER = 0.3;
+const q = new URLSearchParams(location.search);
+const LAUNCHER = q.has('launcher'), EMBEDDED = q.has('embedded');
+const $ = id => document.getElementById(id);
+const root = document.documentElement, stage = $('stage'), video = $('awake'), still = $('still'), typed = $('typed'), skip = $('skip');
+let state = '', mode = '', timers = [];
+
+function setState(s) {
+  if (state === 'DONE') return;
+  state = s;
+  // nc = height of any browser-drawn frame in physical pixels, as the reference reported it.
+  document.title = 'CLAUDE_SPLASH_' + s + (s === 'READY' || s === 'PLAYING' ? '|nc=' + Math.max(0, Math.round((outerHeight - innerHeight) * devicePixelRatio)) : '');
+}
+function later(sec, fn) { timers.push(setTimeout(fn, sec * 1000)); }
+
+// A handful of warm motes rising past the face; small elements, transform/opacity only.
+(function makeMotes() {
+  const box = $('motes');
+  for (let i = 0; i < 12; i++) {
+    const m = document.createElement('i'), r = (a, b) => a + Math.random() * (b - a);
+    m.className = 'mote';
+    m.style.cssText = `--s:${r(6, 16)}px;--x:${r(18, 70)}vw;--y:${r(45, 95)}vh;--dx:${r(4, 14)}vw;--dy:${-r(18, 40)}vh;--o:${r(.45, .9)};--d:${r(2.4, 3.4)}s;--t:${r(.6, 1.6)}s`;
+    box.appendChild(m);
+  }
+})();
+
+// Kept for the host contract; with no sound it only stops decoding.
+window.__claudeStopSound = () => video.pause();
+
+async function onBattery() {
+  const p = q.get('power');
+  if (p === 'battery') return true;
+  if (p === 'ac') return false;
+  try { return !(await navigator.getBattery()).charging; } catch { return false; }
+}
+
+function useStill() {
+  mode = 'still'; root.dataset.mode = mode;
+  video.pause(); video.removeAttribute('src'); video.load();
+  // Wait for load, not decode(): the host keeps the view offscreen until READY,
+  // and decode() can stall for a page that is not being rendered.
+  return new Promise((resolve, reject) => {
+    still.onload = () => resolve();
+    still.onerror = reject;
+    still.src = STILL;
+  });
+}
+function useVideo() {
+  mode = 'video'; root.dataset.mode = mode;
+  video.src = VIDEO; video.preload = 'auto';
+  return new Promise((resolve, reject) => {
+    if (video.readyState >= 3) return resolve();
+    video.addEventListener('canplaythrough', resolve, { once: true });
+    video.addEventListener('error', () => reject(video.error), { once: true });
+  });
+}
+
+function finish() {
+  if (state === 'DONE') return;
+  stage.classList.add('ending');
+  if (LAUNCHER) { setState('DONE'); return; }        // the host fades the whole view out
+  stage.classList.add('closing');
+  later(0.75, () => { setState('DONE'); document.body.classList.add('hint'); });
+}
+
+function typeTitle() {
+  const chars = [...TITLE];
+  chars.forEach((_, n) => later(TYPE_AT + n * TYPE_MS / 1000, () => {
+    typed.innerHTML = chars.slice(0, n + 1).map((ch, k) => k < BOLD ? '<b>' + ch + '</b>' : ch).join('');
+  }));
+}
+
+async function start() {
+  if (state === 'PLAYING') return;
+  timers.forEach(clearTimeout); timers = [];
+  stage.classList.remove('play', 'ending', 'closing');
+  typed.textContent = '';
+  void stage.offsetWidth;                              // restart the CSS animations on replay
+  if (mode === 'video') {
+    video.currentTime = 0;
+    try { await video.play(); } catch { await useStill().catch(() => {}); }
+  }
+  stage.classList.add('play');
+  setState('PLAYING');
+  typeTitle();
+  if (mode === 'still') later(CLIP + HOLD_AFTER, finish);
+}
+window.__claudeBeginPlayback = start;
+
+video.addEventListener('ended', () => { if (mode === 'video') later(HOLD_AFTER, finish); });
+
+(async function prepare() {
+  try {
+    if (await onBattery()) await useStill();
+    else await useVideo().catch(useStill);             // a clip that will not decode falls back to the still
+  } catch { setState('DONE'); return; }
+  if (state) return;
+  setState('READY');
+  if (!EMBEDDED) start();
+})();
+setTimeout(() => { if (!state) setState('DONE'); }, 8000);   // never hold startup on a stuck decoder
+
+function skipNow() { if (state !== 'DONE') setState('DONE'); }
+if (LAUNCHER) {
+  skip.style.display = 'block';
+  addEventListener('click', skipNow);
+}
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (LAUNCHER) { if (k === 'escape' || k === ' ' || k === 'enter') skipNow(); return; }
+  if (k === ' ' || k === 'r') { document.body.classList.remove('hint'); state = 'READY'; start(); }
+  else if (k === 'f') document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen();
+});
+addEventListener('mousemove', () => {
+  if (LAUNCHER) return;
+  document.body.style.cursor = 'default';
+  document.body.classList.add('hint');
+  clearTimeout(window.__hintTimer);
+  window.__hintTimer = setTimeout(() => { if (state !== 'DONE') document.body.classList.remove('hint'); }, 1800);
+});
+</script>
+</body>
+</html>
