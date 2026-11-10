@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>claude-moe self-test</title>
+<style>
+  /* Mimics the claude.ai layout the background looks for: a sidebar, a main region with a transcript and an input dock. */
+  html, body { margin: 0; height: 100%; font: 15px/1.6 sans-serif; background: #f5f4ef; color: #2b2a27; }
+  body { display: flex; }
+  aside { width: 240px; background: #efede6; border-right: 1px solid #e2dfd5; padding: 16px; }
+  main { flex: 1; display: flex; flex-direction: column; background: #f5f4ef; }
+  [data-chat-transcript] { flex: 1; padding: 32px; overflow: auto; }
+  .bubble { max-width: 560px; margin: 0 0 18px; }
+  [data-chat-input-container] { margin: 0 32px 24px; background: #fff; border: 1px solid #e2dfd5; border-radius: 16px; padding: 14px; }
+</style>
+</head>
+<body>
+  <aside>侧栏</aside>
+  <main>
+    <div data-chat-transcript>
+      <p class="bubble">测试夹具：背景应只出现在右侧聊天区，侧栏保持原样。</p>
+      <p class="bubble">The quick brown fox jumps over the lazy dog.</p>
+    </div>
+    <div data-chat-input-container><div contenteditable="true" role="textbox">输入框</div></div>
+  </main>
+</body>
+</html>
