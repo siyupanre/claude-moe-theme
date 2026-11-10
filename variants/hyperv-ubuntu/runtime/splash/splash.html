@@ -34,6 +34,7 @@
   .rule { margin: 2.2vh 0 1.8vh; height: 2px; width: 24vw; background: linear-gradient(90deg, var(--orange), rgba(232,118,44,0)); transform: scaleX(0); transform-origin: left; }
   .welcome { font-size: clamp(15px, 1.7vw, 30px); letter-spacing: .3em; opacity: 0; transform: translateY(12px); }
   .welcome em { font-style: normal; color: var(--orange); }
+  .status { margin-top: 1.6vh; font-size: clamp(12px, 1.1vw, 18px); letter-spacing: .2em; opacity: 0; }
 
   #skip { position: absolute; right: 26px; bottom: 22px; font: 13px/1 "Noto Sans CJK SC", sans-serif; letter-spacing: .12em; color: rgba(255,255,255,.8); opacity: 0;
     padding: 7px 12px; border-radius: 14px; background: rgba(8,8,16,.38); border: 1px solid rgba(255,255,255,.18); text-shadow: 0 1px 2px rgba(0,0,0,.5); display: none; }
@@ -56,6 +57,8 @@
   .play .welcome  { animation: rise .8s 2.55s cubic-bezier(.2,.7,.3,1) forwards; }
   .play #skip     { animation: show .5s 1s ease-out forwards; }
   .ending #skip   { animation: hide .4s ease-in forwards; }
+  .waiting .status { animation: show .5s ease-out forwards, breathe 1.6s .5s ease-in-out infinite; }
+  .ending .status  { animation: none; opacity: 0; }
   .closing #fade  { animation: show .7s ease-in forwards; }
 
   @keyframes show   { to { opacity: 1; } }
@@ -65,6 +68,7 @@
   @keyframes blink  { 0% { opacity: 1; } 50% { opacity: 0; } }
   @keyframes grow   { to { transform: scaleX(1); } }
   @keyframes rise   { to { opacity: 1; transform: none; } }
+  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
   @keyframes drift  { 0% { opacity: 0; transform: translate(0, 0); } 25% { opacity: var(--o); } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)); } }
 </style>
 </head>
@@ -80,6 +84,7 @@
     <div class="title"><span id="typed"></span><span class="caret"></span></div>
     <div class="rule"></div>
     <div class="welcome">欢迎回来，<em>Master</em></div>
+    <div class="status">正在连接 Claude……</div>
   </div>
   <div id="fade" class="layer"></div>
   <div id="skip">点击跳过</div>
@@ -93,15 +98,17 @@
 //   title CLAUDE_SPLASH_PLAYING     -> host focuses the view
 //   title CLAUDE_SPLASH_DONE        -> host calls window.__claudeStopSound(sec) and fades the view out
 // Query: ?launcher (host-driven, Esc/space/enter/click skip), ?embedded (wait for the host),
-//        ?power=ac|battery (the host passes the AC state; battery shows the still frame instead of the clip).
+//        ?power=ac|battery (the host passes the AC state; battery shows the still frame instead of the clip),
+//        ?hold=<seconds> (after the clip, wait up to that long for window.__claudeAppReady() before finishing).
 // The splash is silent: the clip has no audio track.
 const VIDEO = 'video/awake.mp4', STILL = 'video/awake-still.jpg';
 const CLIP = 4.0, TITLE = 'Claude 启动……', BOLD = 6, TYPE_AT = 1.4, TYPE_MS = 110, HOLD_AFTER = 0.3;
 const q = new URLSearchParams(location.search);
 const LAUNCHER = q.has('launcher'), EMBEDDED = q.has('embedded');
+const HOLD_MAX = Math.max(0, Number(q.get('hold')) || 0);
 const $ = id => document.getElementById(id);
 const root = document.documentElement, stage = $('stage'), video = $('awake'), still = $('still'), typed = $('typed'), skip = $('skip');
-let state = '', mode = '', timers = [];
+let state = '', mode = '', timers = [], appReady = !HOLD_MAX, waiting = false;
 
 function setState(s) {
   if (state === 'DONE') return;
@@ -154,12 +161,26 @@ function useVideo() {
 }
 
 function finish() {
-  if (state === 'DONE') return;
+  if (state === 'DONE' || stage.classList.contains('ending')) return;
+  waiting = false;
   stage.classList.add('ending');
   if (LAUNCHER) { setState('DONE'); return; }        // the host fades the whole view out
   stage.classList.add('closing');
   later(0.75, () => { setState('DONE'); document.body.classList.add('hint'); });
 }
+
+// End of the clip: leave at once if the app behind is ready, otherwise hold the last frame
+// with a "connecting" line until the host reports ready or HOLD_MAX runs out.
+function clipDone() {
+  if (appReady) { later(HOLD_AFTER, finish); return; }
+  waiting = true;
+  stage.classList.add('waiting');
+  later(HOLD_MAX, finish);
+}
+window.__claudeAppReady = () => {
+  appReady = true;
+  if (waiting) { waiting = false; finish(); }
+};
 
 function typeTitle() {
   const chars = [...TITLE];
@@ -171,7 +192,8 @@ function typeTitle() {
 async function start() {
   if (state === 'PLAYING') return;
   timers.forEach(clearTimeout); timers = [];
-  stage.classList.remove('play', 'ending', 'closing');
+  waiting = false;
+  stage.classList.remove('play', 'ending', 'closing', 'waiting');
   typed.textContent = '';
   void stage.offsetWidth;                              // restart the CSS animations on replay
   if (mode === 'video') {
@@ -181,11 +203,11 @@ async function start() {
   stage.classList.add('play');
   setState('PLAYING');
   typeTitle();
-  if (mode === 'still') later(CLIP + HOLD_AFTER, finish);
+  if (mode === 'still') later(CLIP, clipDone);
 }
 window.__claudeBeginPlayback = start;
 
-video.addEventListener('ended', () => { if (mode === 'video') later(HOLD_AFTER, finish); });
+video.addEventListener('ended', () => { if (mode === 'video') clipDone(); });
 
 (async function prepare() {
   try {
