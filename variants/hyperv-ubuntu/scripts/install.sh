@@ -21,6 +21,8 @@ install -m 0755 "$project/scripts/claude-moe" "$PREFIX/bin/claude-moe"
 [ -f "$PREFIX/config.json" ] || cat > "$PREFIX/config.json" <<'EOF'
 {
  "splash": true,
+ "splashWaitForApp": true,
+ "splashMaxWait": 20,
  "background": true,
  "wash": 0.65,
  "composer": "transparent",
