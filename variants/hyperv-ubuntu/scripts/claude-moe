@@ -12,6 +12,25 @@ official() {
   exec "$OFFICIAL" "$@"
 }
 
+# claude-moe --wash 0.75 : set the background wash (0 to 0.95); a running themed Claude applies it at once.
+if [ "${1:-}" = --wash ]; then
+  exec python3 -I - "$PREFIX/config.json" "${2:-}" <<'EOF'
+import json, sys
+path, raw = sys.argv[1], sys.argv[2]
+try:
+    value = float(raw)
+    if not 0 <= value <= 0.95: raise ValueError
+except ValueError:
+    sys.exit('claude-moe: --wash takes a number from 0 to 0.95, e.g. --wash 0.75')
+try: config = json.load(open(path))
+except (OSError, ValueError): config = {}
+config['wash'] = round(value, 2)
+with open(path + '.tmp', 'w') as f: f.write(json.dumps(config, indent=1) + '\n')
+import os; os.replace(path + '.tmp', path)
+print(f'claude-moe: wash set to {config["wash"]}')
+EOF
+fi
+
 if [ ! -x "$OFFICIAL" ]; then
   echo 'claude-moe: the official Claude is not installed' >&2
   exit 1
