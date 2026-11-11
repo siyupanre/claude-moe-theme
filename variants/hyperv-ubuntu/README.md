@@ -68,6 +68,7 @@ variants/hyperv-ubuntu/
 bash variants/hyperv-ubuntu/scripts/install.sh
 
 # 2. 可选：用独立配置试运行约 45 秒，事件记录写在工作目录里
+#    可以用 CLAUDE_MOE_CONFIG 指定一个测试用的 config.json
 bash variants/hyperv-ubuntu/tests/isolated-run.sh /tmp/claude-moe-test 45
 
 # 3. 彻底退出 Claude（菜单 > 退出，或 Ctrl+Q），然后切换
@@ -90,7 +91,17 @@ bash variants/hyperv-ubuntu/scripts/uninstall.sh
 
 ### 配置
 
-配置文件是 `~/.local/share/claude-moe/config.json`，改完重启 Claude 生效：
+配置文件是 `~/.local/share/claude-moe/config.json`。遮罩浓度 `wash` 改完**立即生效**，正在运行的 Claude 会马上更新所有打开的聊天页面；其他项改完要重启 Claude 才生效。
+
+想对着真实界面比较不同浓度，用这条命令最方便，每次运行背景都会当场变化：
+
+```bash
+~/.local/share/claude-moe/bin/claude-moe --wash 0.75
+```
+
+把 `0.75` 换成其他数字就能来回对比。范围是 0 到 0.95，填写超出范围或不是数字时会提示错误，配置不会被修改。直接编辑 `config.json` 里的 `wash` 并保存，效果也一样。
+
+全部配置项：
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
@@ -98,7 +109,7 @@ bash variants/hyperv-ubuntu/scripts/uninstall.sh
 | `splashWaitForApp` | `true` | 开场播完后，是否等对话界面加载好再结束 |
 | `splashMaxWait` | `20` | 最多等几秒，0 到 60；设为 0 表示不等待 |
 | `background` | `true` | 是否显示聊天背景 |
-| `wash` | `0.65` | 遮罩浓度，0 到 0.95，数值越大背景越淡 |
+| `wash` | `0.65` | 遮罩浓度，0 到 0.95，数值越大背景越淡；修改后立即生效 |
 | `composer` | `"transparent"` | 输入框样式：`transparent` 去掉底色，`solid` 保留底色 |
 | `pauseWhenUnfocused` | `true` | Claude 不在前台时暂停背景 |
 | `diagnostics` | `false` | 记录背景位置和丢帧情况，写在 `~/.config/Claude/claude-moe/status.json` |
@@ -111,6 +122,7 @@ bash variants/hyperv-ubuntu/scripts/uninstall.sh
 - **沙箱**：`chrome-sandbox` 链接到官方的 setuid 版本，渲染进程的沙箱保持开启。
 - **主窗口识别**：用“没有父窗口、可见、最小尺寸 600×400”来识别官方主窗口，并且要等窗口构造完成后再判断，因为触发 `browser-window-created` 事件时最小尺寸还没生效。快捷输入窗口是 606×470 但创建时隐藏，不会误判。开机隐藏启动时不播开场。
 - **背景注入**：聊天界面加载自远端 `https://claude.ai`，它的 CSP 允许 blob 视频，背景脚本运行在隔离环境中。在桌面版里，Chat、Code 和 Project 是同一个页面（`/epitaxy`），注入一次后靠监听页面结构变化跟着界面切换，流式输出的文字不会触发重新扫描。页面的权限策略禁止 `unload` 事件，所以清理工作放在 `pagehide` 里做。
+- **遮罩浓度实时生效**：主进程监视配置文件所在的目录。因为很多编辑器保存时会替换文件本身，所以监视目录而不是单个文件。检测到 `wash` 变化后，等 0.2 秒避免重复触发，再把新值推送到所有已打开的聊天页面，之后打开的页面也使用新值。
 - **开场等待界面**：主进程每 0.4 秒在另一个隔离环境里检查 claude.ai 页面：出现输入框，或者非对话页已加载完，就算就绪，然后通知开场页结束。这项检查只看元素是否存在，不读取内容，最多检查 40 秒。
 - **桌面入口**：用户级 `.desktop` 文件不带 `X-Claude-Generated=true` 标记，官方程序就不会覆盖它。Claude 自己生成的入口会另存一份，切回官方版时原样恢复。
 - **开机自启**：Claude 写入的自启项会直接调用程序路径，主题版在启动和退出时把它改为经过启动器，`switch.sh` 和 `uninstall.sh` 也会同步修改。
