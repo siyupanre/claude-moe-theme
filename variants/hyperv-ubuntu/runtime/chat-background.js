@@ -5,7 +5,8 @@
 function installClaudeChatBackground(poster, encodedVideo, suspended = false, options = {}) {
   const SLOT = '__claudeFixedBackground';
   if (window[SLOT]) { window[SLOT].refresh(); return true; }
-  const WASH = Math.min(0.95, Math.max(0, Number(options.wash ?? 0.65)));
+  const clampWash = value => Math.min(0.95, Math.max(0, Number(value)));
+  let WASH = Number.isFinite(Number(options.wash)) ? clampWash(options.wash) : 0.65;
   // 'transparent' (default): the composer box loses its fill but keeps its border and shadow.
   // 'solid': the composer box keeps its own background.
   const SOLID_COMPOSER = options.composer === 'solid';
@@ -221,6 +222,7 @@ function installClaudeChatBackground(poster, encodedVideo, suspended = false, op
   window[SLOT] = {
     refresh,
     setSuspended(value) { suspended = Boolean(value); geometry(); },
+    setWash(value) { if (Number.isFinite(Number(value))) { WASH = clampWash(value); updateTheme(); } return WASH; },
     stats() {
       const v = active?.video, r = active?.host.getBoundingClientRect(), b = active?.layer.getBoundingClientRect();
       const q = v?.getVideoPlaybackQuality();

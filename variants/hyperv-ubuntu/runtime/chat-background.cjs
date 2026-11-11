@@ -13,8 +13,8 @@ module.exports = function attachChatBackground(app, assets, {config, onBattery, 
   const script = fs.readFileSync(path.join(assets, 'chat-background.js'), 'utf8');
   const poster = 'data:image/jpeg;base64,' + fs.readFileSync(path.join(assets, 'chat-background.jpg')).toString('base64');
   const video = fs.readFileSync(path.join(assets, 'chat-background.mp4')).toString('base64');
-  const options = JSON.stringify({wash: Number.isFinite(Number(config.wash)) ? Number(config.wash) : 0.65,
-    composer: config.composer === 'solid' ? 'solid' : 'transparent'});
+  const settings = {wash: Number.isFinite(Number(config.wash)) ? Number(config.wash) : 0.65,
+    composer: config.composer === 'solid' ? 'solid' : 'transparent'};
   const selfTestUrl = process.env.CLAUDE_MOE_SELFTEST_URL || null;
   const diagnostics = process.env.CLAUDE_MOE_DIAG === '1' || config.diagnostics === true;
   const tracked = new Set(), installed = new Set();
@@ -56,7 +56,7 @@ module.exports = function attachChatBackground(app, assets, {config, onBattery, 
       try {
         const present = await wc.executeJavaScriptInIsolatedWorld(WORLD, [{code: 'Boolean(window.__claudeFixedBackground&&(window.__claudeFixedBackground.refresh(),true))'}]);
         if (!present && !wc.isDestroyed()) {
-          await wc.executeJavaScriptInIsolatedWorld(WORLD, [{code: `${script}\ninstallClaudeChatBackground(${JSON.stringify(poster)},${JSON.stringify(video)},${shouldPause()},${options});`}]);
+          await wc.executeJavaScriptInIsolatedWorld(WORLD, [{code: `${script}\ninstallClaudeChatBackground(${JSON.stringify(poster)},${JSON.stringify(video)},${shouldPause()},${JSON.stringify(settings)});`}]);
           if (!installed.has(wc)) { installed.add(wc); status('background_installed', where(wc.getURL())); }
           if (diagnostics) for (const delay of [4000, 15000]) setTimeout(() => report(wc), delay).unref();
         }
@@ -87,5 +87,17 @@ module.exports = function attachChatBackground(app, assets, {config, onBattery, 
     powerMonitor.on('on-ac', scheduleUpdate);
   });
 
-  return {setSuspended(value) { suspended = Boolean(value); update(); }};
+  return {
+    setSuspended(value) { suspended = Boolean(value); update(); },
+    // Applies a new wash to every open chat page now and to pages opened later.
+    setWash(value) {
+      const wash = Number(value);
+      if (!Number.isFinite(wash)) return;
+      settings.wash = wash;
+      for (const wc of tracked) {
+        if (wc.isDestroyed() || !eligible(wc.getURL())) continue;
+        wc.executeJavaScriptInIsolatedWorld(WORLD, [{code: `window.__claudeFixedBackground?.setWash(${wash})`}]).catch(() => {});
+      }
+    },
+  };
 };

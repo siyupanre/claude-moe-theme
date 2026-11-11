@@ -9,9 +9,29 @@ const assets = path.join(process.resourcesPath, 'moe');
 const DEFAULTS = {splash: true, splashWaitForApp: true, splashMaxWait: 20, background: true, wash: 0.65,
   composer: 'transparent', pauseWhenUnfocused: true, diagnostics: false};
 
+const CONFIG_FILE = process.env.CLAUDE_MOE_CONFIG || path.join(os.homedir(), '.local/share/claude-moe/config.json');
 function loadConfig() {
-  const file = process.env.CLAUDE_MOE_CONFIG || path.join(os.homedir(), '.local/share/claude-moe/config.json');
-  try { return {...DEFAULTS, ...JSON.parse(fs.readFileSync(file, 'utf8'))}; } catch { return {...DEFAULTS}; }
+  try { return {...DEFAULTS, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))}; } catch { return {...DEFAULTS}; }
+}
+
+// Apply a new wash as soon as config.json changes, so it can be tuned against the real UI without
+// a restart. Watches the directory because editors often replace the file instead of writing it.
+function watchWash(background, current) {
+  let timer = null, wash = current;
+  try {
+    fs.watch(path.dirname(CONFIG_FILE), (_type, name) => {
+      if (name && name !== path.basename(CONFIG_FILE)) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        let next;
+        try { next = Number(JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')).wash); } catch { return; }
+        if (!Number.isFinite(next) || next === wash) return;
+        wash = next;
+        background.setWash(wash);
+        status('wash_changed', wash);
+      }, 200);
+    }).unref();
+  } catch {}
 }
 
 // Event log for troubleshooting: codes and timings only, never page content.
@@ -106,6 +126,7 @@ function install() {
   if (config.background) {
     try {
       background = require('./chat-background.cjs')(app, assets, {config, onBattery, status});
+      watchWash(background, Number(config.wash));
     } catch (error) { status('background_unavailable', String(error && error.message)); }
   }
 
