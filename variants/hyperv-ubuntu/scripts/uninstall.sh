@@ -17,6 +17,17 @@ if [ -f "$user_desktop" ] && grep -q '^X-Claude-Moe=true' "$user_desktop"; then
   fi
   update-desktop-database "$(dirname "$user_desktop")" >/dev/null 2>&1 || true
 fi
+# Put back desktop icons that install.sh replaced with links.
+desk_dir=$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")
+for saved in "$PREFIX"/desktop-icons/*.desktop; do
+  [ -f "$saved" ] || continue
+  icon="$desk_dir/$(basename "$saved")"
+  if [ -L "$icon" ] || [ ! -e "$icon" ]; then
+    rm -f "$icon"
+    cp -p "$saved" "$icon"
+    gio set "$icon" metadata::trusted true >/dev/null 2>&1 || true
+  fi
+done
 # An "open at login" entry written by the themed copy points at it; point it back at the official app.
 autostart="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/claude-desktop.desktop"
 [ -f "$autostart" ] && sed -i -e "s|\"$PREFIX/app/claude-desktop\"|\"/usr/lib/claude-desktop/claude-desktop\"|" \

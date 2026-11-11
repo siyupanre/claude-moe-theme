@@ -41,18 +41,32 @@ if [ "${1:-}" = --desktop ]; then
   mkdir -p "$(dirname "$user_desktop")"
   # Keep the app's own generated entry (it carries X-Claude-Generated) so uninstall can restore it,
   # and start from it because it lists more launcher actions than the packaged one.
+  # Reinstalls reuse that backup, so the extra actions survive a second run.
   template=/usr/share/applications/$DESKTOP_ID
+  backup="$PREFIX/$DESKTOP_ID.before-moe"
   if [ -f "$user_desktop" ] && ! grep -q '^X-Claude-Moe=true' "$user_desktop"; then
-    cp "$user_desktop" "$PREFIX/$DESKTOP_ID.before-moe"
-    grep -q '^X-Claude-Generated=true' "$user_desktop" && template="$PREFIX/$DESKTOP_ID.before-moe"
+    cp "$user_desktop" "$backup"
   fi
+  if [ -f "$backup" ] && grep -q '^X-Claude-Generated=true' "$backup"; then template="$backup"; fi
   # No X-Claude-Generated line: the official app then leaves this entry alone.
   sed -e '/^X-Claude-Generated=/d' -e '/^TryExec=/d' \
       -e "s|^Exec=claude-desktop|Exec=$PREFIX/bin/claude-moe|" \
       -e '/^\[Desktop Entry\]$/a X-Claude-Moe=true' \
       "$template" > "$user_desktop.tmp"
   mv "$user_desktop.tmp" "$user_desktop"
+  chmod 0755 "$user_desktop"      # a desktop icon linked to this entry must be executable to launch
   update-desktop-database "$(dirname "$user_desktop")" >/dev/null 2>&1 || true
   echo "Desktop entry now opens the themed copy: $user_desktop"
+  # A Claude launcher copied onto the desktop is a separate file that keeps starting the official app.
+  # Back it up and replace it with a link to the entry above, so the desktop icon follows switch.sh too.
+  desk_dir=$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")
+  for icon in "$desk_dir"/*.desktop; do
+    [ -f "$icon" ] && [ ! -L "$icon" ] && grep -q '^Exec=claude-desktop' "$icon" || continue
+    mkdir -p "$PREFIX/desktop-icons"
+    cp -p "$icon" "$PREFIX/desktop-icons/$(basename "$icon")"
+    ln -sf "$user_desktop" "$icon"
+    gio set "$icon" metadata::trusted true >/dev/null 2>&1 || true
+    echo "Desktop icon now follows the Claude entry: $icon"
+  done
 fi
 echo "Installed to $PREFIX"
